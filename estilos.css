@@ -1,3 +1,6 @@
+/* Estilos propios (CSS puro). Bulma pone la base; aquí van los colores de la clínica. */
+
+/* Colores del modo claro */
 :root {
   --verde: #1f8a8a;
   --verde-oscuro: #166b6b;
@@ -6,7 +9,8 @@
   --fondo-pie: #ffffff;
 }
 
-
+/* Colores del modo oscuro: si el celular o el computador está en oscuro
+   (y la persona no eligió claro), o si eligió oscuro con el botón */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --texto-verde: #6fd6d6;
@@ -32,7 +36,7 @@ main {
   flex: 1;
 }
 
-
+/* Barra de arriba */
 .barra {
   background: var(--verde);
 }
@@ -43,7 +47,7 @@ main {
   background: transparent;
 }
 
-
+/* En el celular el menú se abre debajo: que siga con el color de la barra */
 .barra .navbar-menu {
   background: var(--verde);
 }
@@ -53,13 +57,13 @@ main {
   font-size: 1.2rem;
 }
 
-
+/* Pie de página */
 .pie {
   padding: 1.5rem;
   background: var(--fondo-pie);
 }
 
-
+/* Botón principal con el color de la clínica */
 .boton-principal {
   background: var(--verde);
   color: white;
@@ -71,17 +75,17 @@ main {
   color: white;
 }
 
-
+/* Lista de datos del panel */
 #mis-datos li {
   padding: 0.25rem 0;
 }
 
-
+/* Las tablas anchas se pueden deslizar en el celular */
 .tabla-con-scroll {
   overflow-x: auto;
 }
 
-
+/* Botones de las horas libres */
 .boton-hora {
   border-color: var(--verde);
   color: var(--texto-verde);
@@ -93,7 +97,7 @@ main {
   color: white;
 }
 
-
+/* Resumen de citas del panel: tres números grandes en fila */
 .resumen {
   display: flex;
   justify-content: space-around;

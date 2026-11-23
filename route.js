@@ -1,8 +1,26 @@
+// =====================================================================
+//  API de la Clínica (Next.js + PostgreSQL)
+//  Todas las rutas /api/... llegan a este archivo.
+//
+//  Cómo correrlo (se necesita Node.js 20 o más y PostgreSQL):
+//    1) Instalar las librerías (no crea archivos en el proyecto):
+//         npm install --no-save --no-package-lock next react react-dom pg
+//    2) Arrancar, poniendo tus propios datos (inventados):
+//         DATABASE_URL=postgresql://usuario:clave@localhost:5432/clinica \
+//         ADMIN_EMAIL=admin@ejemplo.test ADMIN_PASSWORD=tu-clave \
+//         DEMO_PASSWORD=clave-de-los-ejemplos npx next dev
+//    3) Abrir http://localhost:3000/index.html
+//  La primera vez se crean las tablas y los datos de ejemplo (inventados).
+// =====================================================================
 import pg from "pg";
 import crypto from "node:crypto";
 
+// Conexión a PostgreSQL (la dirección viene de DATABASE_URL)
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
+// ---------------------------------------------------------------------
+//  Respuestas
+// ---------------------------------------------------------------------
 function responder(datos, codigo = 200) {
   return Response.json(datos, { status: codigo });
 }
@@ -11,6 +29,9 @@ function error(mensaje, codigo) {
   return Response.json({ error: mensaje }, { status: codigo });
 }
 
+// ---------------------------------------------------------------------
+//  Contraseñas: se guardan cifradas con scrypt (viene con Node)
+// ---------------------------------------------------------------------
 function cifrarClave(clave) {
   const sal = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(clave, sal, 64).toString("hex");
@@ -23,6 +44,9 @@ function claveCorrecta(clave, guardada) {
   return crypto.timingSafeEqual(nuevo, Buffer.from(hash, "hex"));
 }
 
+// ---------------------------------------------------------------------
+//  Tablas y datos de ejemplo (solo la primera vez)
+// ---------------------------------------------------------------------
 let listo = null;
 
 function prepararBase() {
@@ -65,10 +89,17 @@ async function crearTablas() {
       medico_id INT NOT NULL REFERENCES medicos(id),
       inicio TIMESTAMPTZ NOT NULL,
       motivo VARCHAR(300) NOT NULL,
-      estado VARCHAR(20) NOT NULL DEFAULT 'programada' CHECK (estado IN ('programada', 'cancelada'))
+      estado VARCHAR(20) NOT NULL DEFAULT 'programada' CHECK (estado IN ('programada', 'atendida', 'cancelada')),
+      nota VARCHAR(500)
     );
-    -- Sin cruces: un médico no puede tener dos citas programadas a la misma hora
-    CREATE UNIQUE INDEX IF NOT EXISTS citas_sin_cruce ON citas (medico_id, inicio) WHERE estado = 'programada';
+    -- Para bases creadas antes: agrega la nota y el estado "atendida" (si ya existen, no pasa nada)
+    ALTER TABLE citas ADD COLUMN IF NOT EXISTS nota VARCHAR(500);
+    ALTER TABLE citas DROP CONSTRAINT IF EXISTS citas_estado_check;
+    ALTER TABLE citas ADD CONSTRAINT citas_estado_check CHECK (estado IN ('programada', 'atendida', 'cancelada'));
+    -- Sin cruces: un médico no puede tener dos citas a la misma hora (salvo que una esté cancelada).
+    -- Una cita atendida sigue ocupando su hora.
+    DROP INDEX IF EXISTS citas_sin_cruce;
+    CREATE UNIQUE INDEX citas_sin_cruce ON citas (medico_id, inicio) WHERE estado <> 'cancelada';
   `);
 }
 
@@ -79,7 +110,7 @@ async function sembrar() {
     return;
   }
 
-  
+  // Si ya hay usuarios, la base ya se sembró antes
   const hay = await db.query("SELECT COUNT(*) AS total FROM usuarios");
   if (Number(hay.rows[0].total) > 0) return;
 
@@ -92,7 +123,7 @@ async function sembrar() {
   const demo = process.env.DEMO_PASSWORD;
   if (!demo) return;
 
-  
+  // Médicos de ejemplo (inventados)
   const medicos = [
     ["Dra. Valentina Ríos", "Medicina general", "valentina.rios@ejemplo.test"],
     ["Dr. Andrés Castaño", "Medicina general", "andres.castano@ejemplo.test"],
@@ -106,7 +137,7 @@ async function sembrar() {
     await db.query("INSERT INTO usuarios (nombre, email, clave, rol, medico_id) VALUES ($1, $2, $3, 'medico', $4)", [nombre, correo, cifrarClave(demo), m.rows[0].id]);
   }
 
-  
+  // Pacientes de ejemplo (inventados)
   const pacientes = [
     ["Laura Martínez", "1000000001", "laura.martinez@ejemplo.test", "3001112233"],
     ["Carlos Gómez", "1000000002", "carlos.gomez@ejemplo.test", "3002223344"],
@@ -121,7 +152,7 @@ async function sembrar() {
     await db.query("INSERT INTO usuarios (nombre, email, clave, rol, paciente_id) VALUES ($1, $2, $3, 'paciente', $4)", [nombre, correo, cifrarClave(demo), p.rows[0].id]);
   }
 
-  
+  // Algunas citas en los próximos días hábiles, a las 9:00 y a las 15:00 (hora de Colombia)
   const motivos = ["Control general", "Dolor de cabeza", "Revisión de exámenes", "Chequeo anual", "Tos y fiebre"];
   const dias = proximosDiasHabiles(3);
   let n = 0;
@@ -137,31 +168,50 @@ async function sembrar() {
   console.log("Datos de ejemplo creados");
 }
 
-
+// Fecha de hoy en Colombia, como "2026-11-18"
 function hoyEnColombia() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
 }
 
-
+// Los próximos días de lunes a viernes, sin contar hoy
 function proximosDiasHabiles(cuantos) {
   const dias = [];
   const fecha = new Date(hoyEnColombia() + "T12:00:00Z");
   while (dias.length < cuantos) {
     fecha.setUTCDate(fecha.getUTCDate() + 1);
-    const dia = fecha.getUTCDay(); 
+    const dia = fecha.getUTCDay(); // 0 = domingo, 6 = sábado
     if (dia !== 0 && dia !== 6) dias.push(fecha.toISOString().slice(0, 10));
   }
   return dias;
 }
 
+// ---------------------------------------------------------------------
+//  Ayudas para las rutas
+// ---------------------------------------------------------------------
+
+// Lee el JSON que manda la página (si viene mal, devuelve un objeto vacío).
+// Solo se guardan textos: los números se pasan a texto y lo demás (listas, objetos) se ignora.
 async function leerCuerpo(request) {
+  let datos;
   try {
-    return await request.json();
+    datos = await request.json();
   } catch {
     return {};
   }
+  const limpio = {};
+  for (const campo in datos) {
+    if (typeof datos[campo] === "string") limpio[campo] = datos[campo];
+    if (typeof datos[campo] === "number") limpio[campo] = String(datos[campo]);
+  }
+  return limpio;
 }
 
+// Convierte un id ("3") en número. Si no es un número entero que quepa en la base, devuelve 0.
+function aId(texto) {
+  return /^\d{1,9}$/.test(String(texto)) ? Number(texto) : 0;
+}
+
+// Transacción: hace varios cambios en la base y, si uno falla, deshace todos
 async function transaccion(trabajo) {
   const cliente = await db.connect();
   try {
@@ -177,7 +227,7 @@ async function transaccion(trabajo) {
   }
 }
 
-
+// Revisa que los campos obligatorios vengan llenos. Devuelve el mensaje de error o null.
 function faltan(datos, campos) {
   for (const campo of campos) {
     if (!datos[campo] || String(datos[campo]).trim() === "") return "Falta el campo " + campo + ".";
@@ -185,6 +235,8 @@ function faltan(datos, campos) {
   return null;
 }
 
+// ¿Quién hace el pedido? Busca el token de la cabecera Authorization en la tabla sesiones.
+// La sesión dura 8 horas.
 async function usuarioActual(request) {
   const cabecera = request.headers.get("authorization") || "";
   const token = cabecera.replace("Bearer ", "");
@@ -198,17 +250,22 @@ async function usuarioActual(request) {
   return r.rows[0] || null;
 }
 
+// Crea una sesión nueva y devuelve el token
 async function crearSesion(usuarioId) {
+  await db.query("DELETE FROM sesiones WHERE creado < now() - interval '8 hours'"); // limpia las vencidas
   const token = crypto.randomBytes(32).toString("hex");
   await db.query("INSERT INTO sesiones (token, usuario_id) VALUES ($1, $2)", [token, usuarioId]);
   return token;
 }
 
-
+// Lo que se devuelve de un usuario (nunca la clave)
 function datosUsuario(u) {
   return { id: u.id, nombre: u.nombre, email: u.email, rol: u.rol };
 }
 
+// ---------------------------------------------------------------------
+//  Cuentas: login, registro, logout y yo
+// ---------------------------------------------------------------------
 async function login(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["email", "clave"]);
@@ -222,6 +279,7 @@ async function login(request) {
   return responder({ token, usuario: datosUsuario(u) });
 }
 
+// Un paciente se registra solo: se crean su ficha y su cuenta al mismo tiempo
 async function registro(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "documento", "email", "clave"]);
@@ -237,6 +295,7 @@ async function registro(request) {
   }
 }
 
+// Crea la ficha del paciente y su cuenta al mismo tiempo (la usan el registro y el administrador)
 function guardarPacienteConCuenta(datos) {
   const email = datos.email.trim().toLowerCase();
   return transaccion(async function (cliente) {
@@ -260,17 +319,26 @@ async function logout(request) {
   return responder({ mensaje: "Sesión cerrada." });
 }
 
+// ---------------------------------------------------------------------
+//  Errores de la base de datos que se le explican al usuario
+//  23505 = dato repetido (correo o documento)   23503 = tiene citas   22001 = texto muy largo
+// ---------------------------------------------------------------------
 function errorDeBase(e, repetido) {
   if (e.code === "23505") return error(repetido, 409);
   if (e.code === "23503") return error("No se puede borrar porque tiene citas.", 409);
   if (e.code === "22001") return error("Algún dato es demasiado largo.", 400);
   throw e;
 }
+
+// ---------------------------------------------------------------------
+//  Médicos (crear, editar y borrar: solo el administrador)
+// ---------------------------------------------------------------------
 async function listarMedicos() {
   const r = await db.query("SELECT id, nombre, especialidad, email FROM medicos ORDER BY nombre");
   return responder(r.rows);
 }
 
+// Al crear un médico se crea también su cuenta para entrar
 async function crearMedico(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "especialidad", "email", "clave"]);
@@ -313,7 +381,7 @@ async function editarMedico(request, id) {
         email,
         id,
       ]);
-      
+      // La cuenta del médico cambia igual (nombre y correo para entrar)
       await cliente.query("UPDATE usuarios SET nombre = $1, email = $2 WHERE medico_id = $3", [datos.nombre.trim(), email, id]);
       return r.rows[0];
     });
@@ -326,7 +394,7 @@ async function editarMedico(request, id) {
 
 async function borrarMedico(id) {
   try {
-    const r = await db.query("DELETE FROM medicos WHERE id = $1", [id]); 
+    const r = await db.query("DELETE FROM medicos WHERE id = $1", [id]); // su cuenta se borra sola (CASCADE)
     if (r.rowCount === 0) return error("El médico no existe.", 404);
     return responder({ mensaje: "Médico borrado." });
   } catch (e) {
@@ -334,11 +402,15 @@ async function borrarMedico(id) {
   }
 }
 
+// ---------------------------------------------------------------------
+//  Pacientes (solo el administrador)
+// ---------------------------------------------------------------------
 async function listarPacientes() {
   const r = await db.query("SELECT id, nombre, documento, email, telefono FROM pacientes ORDER BY nombre");
   return responder(r.rows);
 }
 
+// El administrador crea la ficha y la cuenta del paciente
 async function crearPaciente(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "documento", "email", "clave"]);
@@ -388,9 +460,15 @@ async function borrarPaciente(id) {
   }
 }
 
+// ---------------------------------------------------------------------
+//  Citas
+//  Horario igual para todos los médicos: lunes a viernes,
+//  de 8:00 a 12:00 y de 14:00 a 17:00, citas de 30 minutos.
+// ---------------------------------------------------------------------
 const TRAMOS = [["08:00", "12:00"], ["14:00", "17:00"]];
 const DURACION = 30;
 
+// Todas las horas en que puede empezar una cita: ["08:00", "08:30", ..., "16:30"]
 function horasDelHorario() {
   const horas = [];
   for (const [desde, hasta] of TRAMOS) {
@@ -414,16 +492,16 @@ function aTexto(minutos) {
   return h + ":" + m;
 }
 
-
+// ¿La fecha existe de verdad? (por ejemplo, 2026-02-31 no existe)
 function fechaValida(fecha) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
   const d = new Date(fecha + "T12:00:00Z");
   return !isNaN(d) && d.toISOString().slice(0, 10) === fecha;
 }
 
-
+// Lo que se devuelve de cada cita: con los nombres y la fecha y hora de Colombia
 const CONSULTA_CITAS = `
-  SELECT c.id, c.motivo, c.estado, c.medico_id, c.paciente_id,
+  SELECT c.id, c.motivo, c.nota, c.estado, c.medico_id, c.paciente_id,
          to_char(c.inicio AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') AS fecha,
          to_char(c.inicio AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora,
          m.nombre AS medico, m.especialidad, p.nombre AS paciente
@@ -431,7 +509,7 @@ const CONSULTA_CITAS = `
     JOIN medicos m ON m.id = c.medico_id
     JOIN pacientes p ON p.id = c.paciente_id`;
 
-
+// GET /api/citas: el administrador ve todas; el médico y el paciente, solo las suyas
 async function listarCitas(usuario) {
   let r;
   if (usuario.rol === "administrador") {
@@ -444,6 +522,8 @@ async function listarCitas(usuario) {
   return responder(r.rows);
 }
 
+// GET /api/medicos/:id/horas?fecha=2026-12-01 -> las horas ya ocupadas ese día
+// (la página arma la lista completa de horas y quita estas)
 async function horasOcupadas(request, medicoId) {
   const fecha = new URL(request.url).searchParams.get("fecha") || "";
   if (!fechaValida(fecha)) return error("La fecha debe ser AAAA-MM-DD y existir.", 400);
@@ -451,7 +531,7 @@ async function horasOcupadas(request, medicoId) {
   const r = await db.query(
     `SELECT to_char(inicio AT TIME ZONE 'America/Bogota', 'HH24:MI') AS hora
        FROM citas
-      WHERE medico_id = $1 AND estado = 'programada'
+      WHERE medico_id = $1 AND estado <> 'cancelada'
         AND to_char(inicio AT TIME ZONE 'America/Bogota', 'YYYY-MM-DD') = $2
       ORDER BY hora`,
     [medicoId, fecha]
@@ -459,6 +539,7 @@ async function horasOcupadas(request, medicoId) {
   return responder({ fecha, ocupadas: r.rows.map((fila) => fila.hora) });
 }
 
+// POST /api/citas: el paciente agenda para sí; el administrador, para cualquiera
 async function agendar(request, usuario) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["medico_id", "fecha", "hora", "motivo"]);
@@ -466,21 +547,22 @@ async function agendar(request, usuario) {
 
   if (String(datos.motivo).length > 300) return error("El motivo puede tener máximo 300 caracteres.", 400);
 
-  const pacienteId = usuario.rol === "paciente" ? usuario.paciente_id : Number(datos.paciente_id);
+  const pacienteId = usuario.rol === "paciente" ? usuario.paciente_id : aId(datos.paciente_id);
+  const medicoId = aId(datos.medico_id);
   if (!pacienteId) return error("Falta el campo paciente_id.", 400);
 
-  
+  // ¿Es un día de lunes a viernes y una hora del horario?
   if (!fechaValida(datos.fecha)) return error("La fecha debe ser AAAA-MM-DD y existir.", 400);
-  const dia = new Date(datos.fecha + "T12:00:00Z").getUTCDay(); 
+  const dia = new Date(datos.fecha + "T12:00:00Z").getUTCDay(); // 0 = domingo, 6 = sábado
   if (dia === 0 || dia === 6) return error("Solo se atiende de lunes a viernes.", 400);
   if (!horasDelHorario().includes(datos.hora)) return error("Esa hora está fuera del horario.", 400);
 
-  
+  // ¿No es en el pasado? (hora de Colombia)
   const inicio = `${datos.fecha}T${datos.hora}:00-05:00`;
   if (new Date(inicio) <= new Date()) return error("No se puede agendar en el pasado.", 400);
 
-  
-  const medico = await db.query("SELECT id FROM medicos WHERE id = $1", [Number(datos.medico_id)]);
+  // ¿Existen el médico y el paciente?
+  const medico = await db.query("SELECT id FROM medicos WHERE id = $1", [medicoId]);
   if (medico.rows.length === 0) return error("El médico no existe.", 404);
   const paciente = await db.query("SELECT id FROM pacientes WHERE id = $1", [pacienteId]);
   if (paciente.rows.length === 0) return error("El paciente no existe.", 404);
@@ -488,102 +570,153 @@ async function agendar(request, usuario) {
   try {
     const r = await db.query("INSERT INTO citas (paciente_id, medico_id, inicio, motivo) VALUES ($1, $2, $3, $4) RETURNING id", [
       pacienteId,
-      Number(datos.medico_id),
+      medicoId,
       inicio,
       String(datos.motivo).trim(),
     ]);
     const cita = await db.query(CONSULTA_CITAS + " WHERE c.id = $1", [r.rows[0].id]);
     return responder(cita.rows[0], 201);
   } catch (e) {
-    
+    // El índice citas_sin_cruce no deja dos citas del mismo médico a la misma hora
     if (e.code === "23505") return error("El médico ya tiene una cita a esa hora.", 409);
     throw e;
   }
 }
 
-
+// PATCH /api/citas/:id/cancelar
 async function cancelar(usuario, id) {
   const r = await db.query("SELECT * FROM citas WHERE id = $1", [id]);
   const cita = r.rows[0];
-  
+
+  // Si la cita no es suya, se responde "no existe" para no dar pistas
   const esSuya =
     usuario.rol === "administrador" ||
     (usuario.rol === "medico" && cita?.medico_id === usuario.medico_id) ||
     (usuario.rol === "paciente" && cita?.paciente_id === usuario.paciente_id);
   if (!cita || !esSuya) return error("La cita no existe.", 404);
 
-  if (cita.estado !== "programada") return error("La cita ya estaba cancelada.", 409);
+  if (cita.estado !== "programada") return error("Solo se pueden cancelar citas programadas.", 409);
 
   await db.query("UPDATE citas SET estado = 'cancelada' WHERE id = $1", [id]);
   return responder({ mensaje: "Cita cancelada." });
 }
 
+// PATCH /api/citas/:id/atender: el médico marca su cita como atendida y escribe una nota
+async function marcarAtendida(request, usuario, id) {
+  const datos = await leerCuerpo(request);
+  const falta = faltan(datos, ["nota"]);
+  if (falta) return error(falta, 400);
+  if (String(datos.nota).length > 500) return error("La nota puede tener máximo 500 caracteres.", 400);
+
+  // Solo cuenta si la cita es de este médico y sigue programada
+  const r = await db.query(
+    "UPDATE citas SET estado = 'atendida', nota = $1 WHERE id = $2 AND medico_id = $3 AND estado = 'programada' RETURNING id",
+    [String(datos.nota).trim(), id, usuario.medico_id]
+  );
+  if (r.rowCount === 0) return error("La cita no existe o ya no está programada.", 404);
+  return responder({ mensaje: "Cita atendida." });
+}
+
+// ---------------------------------------------------------------------
+//  Reporte (solo el administrador): cuántas citas tiene cada médico, por estado
+// ---------------------------------------------------------------------
+async function reporteCitasPorMedico() {
+  const r = await db.query(`
+    SELECT m.nombre, m.especialidad,
+           COUNT(c.id)::int AS total,
+           SUM(CASE WHEN c.estado = 'programada' THEN 1 ELSE 0 END)::int AS programadas,
+           SUM(CASE WHEN c.estado = 'atendida' THEN 1 ELSE 0 END)::int AS atendidas,
+           SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END)::int AS canceladas
+      FROM medicos m
+      LEFT JOIN citas c ON c.medico_id = m.id
+     GROUP BY m.id, m.nombre, m.especialidad
+     ORDER BY total DESC, m.nombre`);
+  return responder(r.rows);
+}
+
+// ---------------------------------------------------------------------
+//  Rutas
+// ---------------------------------------------------------------------
+// Recibe todos los pedidos. Si algo falla, responde 500 con { error } en vez de romperse.
+// (el await es importante: sin él, el catch no alcanza a ver los errores de la ruta)
 async function atender(request, { params }) {
-  const { ruta } = await params; 
-  const metodo = request.method;
-  const camino = ruta.join("/");
-
   try {
-    await prepararBase();
-
-    
-    if (metodo === "GET" && camino === "salud") {
-      const r = await db.query("SELECT now() AS hora");
-      return responder({ estado: "ok", hora: r.rows[0].hora });
-    }
-
-    
-    if (metodo === "POST" && camino === "login") return login(request);
-    if (metodo === "POST" && camino === "registro") return registro(request);
-
-    
-    const usuario = await usuarioActual(request);
-    if (!usuario) return error("Debes iniciar sesión.", 401);
-
-    if (metodo === "POST" && camino === "logout") return logout(request);
-    if (metodo === "GET" && camino === "yo") return responder(datosUsuario(usuario));
-
-    const recurso = ruta[0]; 
-    const id = Number(ruta[1]); 
-    const esAdmin = usuario.rol === "administrador";
-
-    
-    if (recurso === "medicos" && ruta.length === 1) {
-      if (metodo === "GET") return listarMedicos();
-      if (metodo === "POST") return esAdmin ? crearMedico(request) : error("No tienes permiso.", 403);
-    }
-    if (recurso === "medicos" && ruta.length === 3 && id > 0 && ruta[2] === "horas" && metodo === "GET") {
-      return horasOcupadas(request, id);
-    }
-    if (recurso === "medicos" && ruta.length === 2 && id > 0) {
-      if (!esAdmin) return error("No tienes permiso.", 403);
-      if (metodo === "PUT") return editarMedico(request, id);
-      if (metodo === "DELETE") return borrarMedico(id);
-    }
-
-    
-    if (recurso === "pacientes") {
-      if (!esAdmin) return error("No tienes permiso.", 403);
-      if (ruta.length === 1 && metodo === "GET") return listarPacientes();
-      if (ruta.length === 1 && metodo === "POST") return crearPaciente(request);
-      if (ruta.length === 2 && id > 0 && metodo === "PUT") return editarPaciente(request, id);
-      if (ruta.length === 2 && id > 0 && metodo === "DELETE") return borrarPaciente(id);
-    }
-
-    
-    if (recurso === "citas" && ruta.length === 1) {
-      if (metodo === "GET") return listarCitas(usuario);
-      if (metodo === "POST") return usuario.rol === "medico" ? error("El médico no agenda citas.", 403) : agendar(request, usuario);
-    }
-    if (recurso === "citas" && ruta.length === 3 && id > 0 && ruta[2] === "cancelar" && metodo === "PATCH") {
-      return cancelar(usuario, id);
-    }
-
-    return error("Esa ruta no existe.", 404);
+    const { ruta } = await params; // por ejemplo /api/medicos/3 -> ["medicos", "3"]
+    return await elegirRuta(request, ruta);
   } catch (e) {
     console.error(e);
     return error("Error en el servidor.", 500);
   }
+}
+
+async function elegirRuta(request, ruta) {
+  const metodo = request.method;
+  const camino = ruta.join("/");
+
+  await prepararBase();
+
+  // GET /api/salud -> dice si la base de datos responde
+  if (metodo === "GET" && camino === "salud") {
+    const r = await db.query("SELECT now() AS hora");
+    return responder({ estado: "ok", hora: r.rows[0].hora });
+  }
+
+  // Rutas públicas (sin sesión)
+  if (metodo === "POST" && camino === "login") return login(request);
+  if (metodo === "POST" && camino === "registro") return registro(request);
+
+  // De aquí para abajo hay que haber iniciado sesión
+  const usuario = await usuarioActual(request);
+  if (!usuario) return error("Debes iniciar sesión.", 401);
+
+  if (metodo === "POST" && camino === "logout") return logout(request);
+  if (metodo === "GET" && camino === "yo") return responder(datosUsuario(usuario));
+
+  const recurso = ruta[0]; // "medicos" o "pacientes"
+  const id = aId(ruta[1]); // el número que viene después, si hay (si no es válido, 0)
+  const esAdmin = usuario.rol === "administrador";
+
+  // Médicos: todos pueden ver la lista; solo el administrador la cambia
+  if (recurso === "medicos" && ruta.length === 1) {
+    if (metodo === "GET") return listarMedicos();
+    if (metodo === "POST") return esAdmin ? crearMedico(request) : error("No tienes permiso.", 403);
+  }
+  if (recurso === "medicos" && ruta.length === 3 && id > 0 && ruta[2] === "horas" && metodo === "GET") {
+    return horasOcupadas(request, id);
+  }
+  if (recurso === "medicos" && ruta.length === 2 && id > 0) {
+    if (!esAdmin) return error("No tienes permiso.", 403);
+    if (metodo === "PUT") return editarMedico(request, id);
+    if (metodo === "DELETE") return borrarMedico(id);
+  }
+
+  // Pacientes: solo el administrador
+  if (recurso === "pacientes") {
+    if (!esAdmin) return error("No tienes permiso.", 403);
+    if (ruta.length === 1 && metodo === "GET") return listarPacientes();
+    if (ruta.length === 1 && metodo === "POST") return crearPaciente(request);
+    if (ruta.length === 2 && id > 0 && metodo === "PUT") return editarPaciente(request, id);
+    if (ruta.length === 2 && id > 0 && metodo === "DELETE") return borrarPaciente(id);
+  }
+
+  // Citas
+  if (recurso === "citas" && ruta.length === 1) {
+    if (metodo === "GET") return listarCitas(usuario);
+    if (metodo === "POST") return usuario.rol === "medico" ? error("El médico no agenda citas.", 403) : agendar(request, usuario);
+  }
+  if (recurso === "citas" && ruta.length === 3 && id > 0 && ruta[2] === "cancelar" && metodo === "PATCH") {
+    return cancelar(usuario, id);
+  }
+  if (recurso === "citas" && ruta.length === 3 && id > 0 && ruta[2] === "atender" && metodo === "PATCH") {
+    return usuario.rol === "medico" ? marcarAtendida(request, usuario, id) : error("Solo el médico atiende citas.", 403);
+  }
+
+  // Reporte: solo el administrador
+  if (metodo === "GET" && camino === "reportes/citas-por-medico") {
+    return esAdmin ? reporteCitasPorMedico() : error("No tienes permiso.", 403);
+  }
+
+  return error("Esa ruta no existe.", 404);
 }
 
 export const GET = atender;
