@@ -1,0 +1,106 @@
+:root {
+  --verde: #1f8a8a;
+  --verde-oscuro: #166b6b;
+  --texto-verde: #166b6b;
+  --fondo: #f4f7f7;
+  --fondo-pie: #ffffff;
+}
+
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --texto-verde: #6fd6d6;
+    --fondo: #121417;
+    --fondo-pie: #1b1e22;
+  }
+}
+
+:root[data-theme="dark"] {
+  --texto-verde: #6fd6d6;
+  --fondo: #121417;
+  --fondo-pie: #1b1e22;
+}
+
+body {
+  background: var(--fondo);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+
+.barra {
+  background: var(--verde);
+}
+
+.barra .navbar-item,
+.barra .navbar-item:hover {
+  color: white;
+  background: transparent;
+}
+
+
+.barra .navbar-menu {
+  background: var(--verde);
+}
+
+.marca {
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+
+.pie {
+  padding: 1.5rem;
+  background: var(--fondo-pie);
+}
+
+
+.boton-principal {
+  background: var(--verde);
+  color: white;
+  border: none;
+}
+
+.boton-principal:hover {
+  background: var(--verde-oscuro);
+  color: white;
+}
+
+
+#mis-datos li {
+  padding: 0.25rem 0;
+}
+
+
+.tabla-con-scroll {
+  overflow-x: auto;
+}
+
+
+.boton-hora {
+  border-color: var(--verde);
+  color: var(--texto-verde);
+  background: transparent;
+}
+
+.boton-hora.is-elegida {
+  background: var(--verde);
+  color: white;
+}
+
+
+.resumen {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+}
+
+.resumen .numero {
+  font-size: 2rem;
+  font-weight: bold;
+}

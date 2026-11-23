@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clínica</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css">
+  <link rel="stylesheet" href="estilos.css">
+  <script>
+    try {
+      const tema = localStorage.getItem("tema");
+      if (tema) document.documentElement.dataset.theme = tema;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  
+  <nav class="navbar barra" aria-label="menú principal">
+    <div class="navbar-brand">
+      <a class="navbar-item marca" href="index.html"> Clínica</a>
+    </div>
+    <div class="navbar-menu is-active">
+      <div class="navbar-start" id="menu"></div>
+      <div class="navbar-end">
+        <span class="navbar-item is-hidden" id="nombre-usuario"></span>
+        <div class="navbar-item">
+          <div class="buttons">
+            <button class="button is-small is-light is-hidden" id="boton-salir">Salir</button>
+            <button class="button is-small is-dark" id="boton-tema"> Modo oscuro</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="section">
+    <div class="container">
+      
+      <div id="aviso" class="notification is-hidden"></div>
+
+      
+      <section id="vista-portada" class="vista">
+        <h1 class="title">Bienvenido a la Clínica</h1>
+        <p class="subtitle">Agenda tus citas médicas en línea, sin llamar.</p>
+
+        <div class="columns">
+          <div class="column">
+            <form class="box" id="form-login">
+              <h2 class="title is-5">Ingresar</h2>
+              <div class="field">
+                <label class="label" for="login-email">Correo</label>
+                <input class="input" type="email" id="login-email" name="email" required>
+              </div>
+              <div class="field">
+                <label class="label" for="login-clave">Contraseña</label>
+                <input class="input" type="password" id="login-clave" name="clave" required>
+              </div>
+              <button class="button boton-principal" type="submit">Entrar</button>
+            </form>
+          </div>
+
+          <div class="column">
+            <form class="box" id="form-registro">
+              <h2 class="title is-5">Soy paciente nuevo</h2>
+              <div class="field">
+                <label class="label" for="reg-nombre">Nombre completo</label>
+                <input class="input" id="reg-nombre" name="nombre" required>
+              </div>
+              <div class="field">
+                <label class="label" for="reg-documento">Documento</label>
+                <input class="input" id="reg-documento" name="documento" required>
+              </div>
+              <div class="field">
+                <label class="label" for="reg-email">Correo</label>
+                <input class="input" type="email" id="reg-email" name="email" required>
+              </div>
+              <div class="field">
+                <label class="label" for="reg-telefono">Teléfono (opcional)</label>
+                <input class="input" id="reg-telefono" name="telefono">
+              </div>
+              <div class="field">
+                <label class="label" for="reg-clave">Contraseña (mínimo 6 caracteres)</label>
+                <input class="input" type="password" id="reg-clave" name="clave" minlength="6" required>
+              </div>
+              <button class="button boton-principal" type="submit">Crear mi cuenta</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      
+      <section id="vista-medicos" class="vista is-hidden">
+        <h1 class="title">Médicos</h1>
+        <div class="columns">
+          <div class="column is-4">
+            <form class="box" id="form-medico">
+              <h2 class="title is-5" id="titulo-form-medico">Nuevo médico</h2>
+              <input type="hidden" name="id">
+              <div class="field">
+                <label class="label" for="med-nombre">Nombre</label>
+                <input class="input" id="med-nombre" name="nombre" required>
+              </div>
+              <div class="field">
+                <label class="label" for="med-especialidad">Especialidad</label>
+                <input class="input" id="med-especialidad" name="especialidad" required>
+              </div>
+              <div class="field">
+                <label class="label" for="med-email">Correo</label>
+                <input class="input" type="email" id="med-email" name="email" required>
+              </div>
+              <div class="field solo-al-crear">
+                <label class="label" for="med-clave">Contraseña inicial</label>
+                <input class="input" type="password" id="med-clave" name="clave" minlength="6">
+              </div>
+              <div class="buttons">
+                <button class="button boton-principal" type="submit">Guardar</button>
+                <button class="button" type="reset">Limpiar</button>
+              </div>
+            </form>
+          </div>
+          <div class="column">
+            <div class="box tabla-con-scroll">
+              <table class="table is-fullwidth is-hoverable">
+                <thead><tr><th>Nombre</th><th>Especialidad</th><th>Correo</th><th></th></tr></thead>
+                <tbody id="tabla-medicos"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      
+      <section id="vista-pacientes" class="vista is-hidden">
+        <h1 class="title">Pacientes</h1>
+        <div class="columns">
+          <div class="column is-4">
+            <form class="box" id="form-paciente">
+              <h2 class="title is-5" id="titulo-form-paciente">Nuevo paciente</h2>
+              <input type="hidden" name="id">
+              <div class="field">
+                <label class="label" for="pac-nombre">Nombre</label>
+                <input class="input" id="pac-nombre" name="nombre" required>
+              </div>
+              <div class="field">
+                <label class="label" for="pac-documento">Documento</label>
+                <input class="input" id="pac-documento" name="documento" required>
+              </div>
+              <div class="field">
+                <label class="label" for="pac-email">Correo</label>
+                <input class="input" type="email" id="pac-email" name="email" required>
+              </div>
+              <div class="field">
+                <label class="label" for="pac-telefono">Teléfono (opcional)</label>
+                <input class="input" id="pac-telefono" name="telefono">
+              </div>
+              <div class="field solo-al-crear">
+                <label class="label" for="pac-clave">Contraseña inicial</label>
+                <input class="input" type="password" id="pac-clave" name="clave" minlength="6">
+              </div>
+              <div class="buttons">
+                <button class="button boton-principal" type="submit">Guardar</button>
+                <button class="button" type="reset">Limpiar</button>
+              </div>
+            </form>
+          </div>
+          <div class="column">
+            <div class="box tabla-con-scroll">
+              <input class="input mb-3" id="buscar-paciente" placeholder="Buscar por nombre o documento…">
+              <table class="table is-fullwidth is-hoverable">
+                <thead><tr><th>Nombre</th><th>Documento</th><th>Correo</th><th>Teléfono</th><th></th></tr></thead>
+                <tbody id="tabla-pacientes"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      
+      <section id="vista-agendar" class="vista is-hidden">
+        <h1 class="title">Agendar cita</h1>
+        <form class="box" id="form-agendar">
+          <div class="columns is-multiline">
+            <div class="column is-4 solo-admin">
+              <label class="label" for="agendar-paciente">Paciente</label>
+              <div class="select is-fullwidth">
+                <select id="agendar-paciente" name="paciente_id"></select>
+              </div>
+            </div>
+            <div class="column is-4">
+              <label class="label" for="agendar-medico">Médico</label>
+              <div class="select is-fullwidth">
+                <select id="agendar-medico" name="medico_id" required></select>
+              </div>
+            </div>
+            <div class="column is-4">
+              <label class="label" for="agendar-fecha">Fecha</label>
+              <input class="input" type="date" id="agendar-fecha" name="fecha" required>
+            </div>
+          </div>
+
+          <label class="label">Hora</label>
+          <p class="help mb-2" id="sugerencia-hora"></p>
+          <div class="buttons" id="botones-horas"></div>
+          <input type="hidden" name="hora" id="agendar-hora">
+
+          <div class="field">
+            <label class="label" for="agendar-motivo">Motivo de la consulta</label>
+            <textarea class="textarea" id="agendar-motivo" name="motivo" maxlength="300" rows="2" required></textarea>
+          </div>
+          <button class="button boton-principal" type="submit">Agendar</button>
+        </form>
+      </section>
+
+      
+      <section id="vista-citas" class="vista is-hidden">
+        <h1 class="title">Citas</h1>
+        <div class="box tabla-con-scroll">
+          <div class="field">
+            <label class="label" for="filtro-estado">Mostrar</label>
+            <div class="select">
+              <select id="filtro-estado">
+                <option value="todas">Todas</option>
+                <option value="programada">Programadas</option>
+                <option value="cancelada">Canceladas</option>
+              </select>
+            </div>
+          </div>
+          <table class="table is-fullwidth is-hoverable">
+            <thead><tr><th>Fecha</th><th>Hora</th><th>Paciente</th><th>Médico</th><th>Motivo</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="tabla-citas"></tbody>
+          </table>
+        </div>
+      </section>
+
+      
+      <section id="vista-panel" class="vista is-hidden">
+        <h1 class="title" id="saludo">Hola</h1>
+        <div class="columns">
+          <div class="column">
+            <div class="box">
+              <h2 class="title is-5">Mis datos</h2>
+              <ul id="mis-datos"></ul>
+            </div>
+          </div>
+          <div class="column">
+            <div class="box">
+              <h2 class="title is-5">Resumen de citas</h2>
+              <div class="resumen" id="resumen-citas"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  
+  <div class="modal" id="modal-confirmar">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <div class="box">
+        <p id="texto-confirmar" class="mb-4"></p>
+        <div class="buttons is-right">
+          <button class="button" id="boton-no">No</button>
+          <button class="button is-danger" id="boton-si">Sí</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
