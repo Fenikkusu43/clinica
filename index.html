@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css">
   <link rel="stylesheet" href="estilos.css">
   <script>
+    // Modo claro u oscuro: si la persona eligió uno antes, se pone antes de pintar la página.
+    // Si no eligió, la página sigue el modo del celular o del computador.
     try {
       const tema = localStorage.getItem("tema");
       if (tema) document.documentElement.dataset.theme = tema;
@@ -14,9 +16,10 @@
   </script>
 </head>
 <body>
+  <!-- Barra de arriba: el menú lo arma js/sesion.js según el rol -->
   <nav class="navbar barra" aria-label="menú principal">
     <div class="navbar-brand">
-      <a class="navbar-item marca" href="index.html"> Clínica</a>
+      <a class="navbar-item marca" href="index.html">✚ Clínica</a>
     </div>
     <div class="navbar-menu is-active">
       <div class="navbar-start" id="menu"></div>
@@ -25,18 +28,23 @@
         <div class="navbar-item">
           <div class="buttons">
             <button class="button is-small is-light is-hidden" id="boton-salir">Salir</button>
-            <button class="button is-small is-dark" id="boton-tema"> Modo oscuro</button>
+            <button class="button is-small is-dark" id="boton-tema">🌙 Modo oscuro</button>
           </div>
         </div>
       </div>
     </div>
   </nav>
+
   <main class="section">
     <div class="container">
+      <!-- Mensajes para el usuario (éxito o error) -->
       <div id="aviso" class="notification is-hidden"></div>
+
+      <!-- ===================== Portada: entrar o registrarse ===================== -->
       <section id="vista-portada" class="vista">
         <h1 class="title">Bienvenido a la Clínica</h1>
         <p class="subtitle">Agenda tus citas médicas en línea, sin llamar.</p>
+
         <div class="columns">
           <div class="column">
             <form class="box" id="form-login">
@@ -52,6 +60,7 @@
               <button class="button boton-principal" type="submit">Entrar</button>
             </form>
           </div>
+
           <div class="column">
             <form class="box" id="form-registro">
               <h2 class="title is-5">Soy paciente nuevo</h2>
@@ -80,6 +89,8 @@
           </div>
         </div>
       </section>
+
+      <!-- ===================== Médicos (administrador) ===================== -->
       <section id="vista-medicos" class="vista is-hidden">
         <h1 class="title">Médicos</h1>
         <div class="columns">
@@ -119,6 +130,8 @@
           </div>
         </div>
       </section>
+
+      <!-- ===================== Pacientes (administrador) ===================== -->
       <section id="vista-pacientes" class="vista is-hidden">
         <h1 class="title">Pacientes</h1>
         <div class="columns">
@@ -163,6 +176,8 @@
           </div>
         </div>
       </section>
+
+      <!-- ===================== Agendar una cita (paciente y administrador) ===================== -->
       <section id="vista-agendar" class="vista is-hidden">
         <h1 class="title">Agendar cita</h1>
         <form class="box" id="form-agendar">
@@ -190,10 +205,12 @@
               <input class="input" type="date" id="agendar-fecha" name="fecha" required>
             </div>
           </div>
+
           <label class="label">Hora</label>
           <p class="help mb-2" id="sugerencia-hora"></p>
           <div class="buttons" id="botones-horas"></div>
           <input type="hidden" name="hora" id="agendar-hora">
+
           <div class="field">
             <label class="label" for="agendar-motivo">Motivo de la consulta</label>
             <textarea class="textarea" id="agendar-motivo" name="motivo" maxlength="300" rows="2" required></textarea>
@@ -201,6 +218,8 @@
           <button class="button boton-principal" type="submit">Agendar</button>
         </form>
       </section>
+
+      <!-- ===================== Lista de citas ===================== -->
       <section id="vista-citas" class="vista is-hidden">
         <h1 class="title">Citas</h1>
         <div class="box tabla-con-scroll">
@@ -211,6 +230,7 @@
                 <option value="todas">Todas</option>
                 <option value="hoy">Solo hoy</option>
                 <option value="programada">Programadas</option>
+                <option value="sin atender">Sin atender</option>
                 <option value="atendida">Atendidas</option>
                 <option value="cancelada">Canceladas</option>
               </select>
@@ -222,15 +242,19 @@
           </table>
         </div>
       </section>
+
+      <!-- ===================== Reporte (administrador) ===================== -->
       <section id="vista-reporte" class="vista is-hidden">
         <h1 class="title">Reporte: citas por médico</h1>
         <div class="box tabla-con-scroll">
           <table class="table is-fullwidth is-hoverable">
-            <thead><tr><th>Médico</th><th>Especialidad</th><th>Programadas</th><th>Atendidas</th><th>Canceladas</th><th>Total</th></tr></thead>
+            <thead><tr><th>Médico</th><th>Especialidad</th><th>Programadas</th><th>Sin atender</th><th>Atendidas</th><th>Canceladas</th><th>Total</th></tr></thead>
             <tbody id="tabla-reporte"></tbody>
           </table>
         </div>
       </section>
+
+      <!-- ===================== Panel: lo primero que se ve al entrar ===================== -->
       <section id="vista-panel" class="vista is-hidden">
         <h1 class="title" id="saludo">Hola</h1>
         <div class="columns">
@@ -250,6 +274,8 @@
       </section>
     </div>
   </main>
+
+  <!-- Ventana para confirmar (la usa la función confirmar() de js/ayudas.js) -->
   <div class="modal" id="modal-confirmar">
     <div class="modal-background"></div>
     <div class="modal-content">
@@ -262,6 +288,8 @@
       </div>
     </div>
   </div>
+
+  <!-- Ventana para atender una cita: el médico escribe una nota -->
   <div class="modal" id="modal-atender">
     <div class="modal-background"></div>
     <div class="modal-content">
@@ -279,9 +307,20 @@
       </form>
     </div>
   </div>
+
   <footer class="footer has-text-centered pie">
     <p class="is-size-7">Clínica · proyecto académico · datos inventados</p>
   </footer>
-  <script src="app.js"></script>
+
+  <!-- El JavaScript está separado por tema. Se carga en este orden porque
+       cada archivo usa lo que definen los de antes (por ejemplo, todos usan api()). -->
+  <script src="js/api.js"></script>
+  <script src="js/ayudas.js"></script>
+  <script src="js/sesion.js"></script>
+  <script src="js/medicos.js"></script>
+  <script src="js/pacientes.js"></script>
+  <script src="js/citas.js"></script>
+  <script src="js/reporte.js"></script>
+  <script src="js/inicio.js"></script>
 </body>
 </html>
