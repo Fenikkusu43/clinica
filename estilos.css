@@ -1,13 +1,9 @@
-/* Estilos propios (CSS puro). Bulma pone la base; aquí van los colores de la clínica. */
-
-/* Colores del modo claro */
 :root {
   --verde: #1f8a8a;
   --verde-oscuro: #166b6b;
   --texto-verde: #166b6b;
   --fondo: #f4f7f7;
   --fondo-pie: #ffffff;
-  /* Etiquetas de estado y botones suaves (Salir, Cancelar, Borrar) */
   --suave-fondo: #eef1f4;
   --suave-texto: #4a4f57;
   --exito-fondo: #e6f7ee;
@@ -19,9 +15,6 @@
   --peligro-fondo: #fdecee;
   --peligro-texto: #b42335;
 }
-
-/* Colores del modo oscuro: si el celular o el computador está en oscuro
-   (y la persona no eligió claro), o si eligió oscuro con el botón */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --texto-verde: #6fd6d6;
@@ -39,7 +32,6 @@
     --peligro-texto: #ff9aa8;
   }
 }
-
 :root[data-theme="dark"] {
   --texto-verde: #6fd6d6;
   --fondo: #121417;
@@ -55,119 +47,88 @@
   --peligro-fondo: #44202a;
   --peligro-texto: #ff9aa8;
 }
-
 body {
   background: var(--fondo);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
-
 main {
   flex: 1;
 }
-
-/* Barra de arriba */
 .barra {
   background: var(--verde);
 }
-
 .barra .navbar-item,
 .barra .navbar-item:hover {
   color: white;
   background: transparent;
 }
-
-/* En el celular el menú se abre debajo: que siga con el color de la barra */
 .barra .navbar-menu {
   background: var(--verde);
 }
-
 .marca {
   font-weight: bold;
   font-size: 1.2rem;
 }
-
-/* Pie de página */
 .pie {
   padding: 1.5rem;
   background: var(--fondo-pie);
 }
-
-/* Botón principal con el color de la clínica */
 .boton-principal {
   background: var(--verde);
   color: white;
   border: none;
 }
-
 .boton-principal:hover {
   background: var(--verde-oscuro);
   color: white;
 }
-
-/* Lista de datos del panel */
 #mis-datos li {
   padding: 0.25rem 0;
 }
-
-/* Las tablas anchas se pueden deslizar en el celular */
 .tabla-con-scroll {
   overflow-x: auto;
 }
-
-/* Botones de las horas libres */
 .boton-hora {
   border-color: var(--verde);
   color: var(--texto-verde);
   background: transparent;
 }
-
 .boton-hora.is-elegida {
   background: var(--verde);
   color: white;
 }
-
-/* Resumen de citas del panel: tres números grandes en fila */
 .resumen {
   display: flex;
   justify-content: space-around;
   text-align: center;
 }
-
 .resumen .numero {
   font-size: 2rem;
   font-weight: bold;
 }
-
-/* Etiquetas de estado y botones suaves: Bulma los deja casi blancos en modo oscuro,
-   así que usan los colores de arriba (cambian solos con el modo) */
 .tag.is-light,
 .button.is-light {
   background-color: var(--suave-fondo);
   color: var(--suave-texto);
 }
-
 .tag.is-success.is-light {
   background-color: var(--exito-fondo);
   color: var(--exito-texto);
 }
-
 .tag.is-info.is-light {
   background-color: var(--info-fondo);
   color: var(--info-texto);
 }
-
 .tag.is-warning.is-light {
   background-color: var(--aviso-fondo);
   color: var(--aviso-texto);
 }
-
 .button.is-danger.is-light {
   background-color: var(--peligro-fondo);
   color: var(--peligro-texto);
 }
-
 .button.is-light:hover,
 .button.is-danger.is-light:hover {
   filter: brightness(1.1);

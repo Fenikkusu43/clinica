@@ -1,46 +1,28 @@
-// =====================================================================
-//  Base de datos de la Clínica (PostgreSQL)
-//  Aquí están: la conexión, las contraseñas cifradas, las tablas,
-//  los datos de ejemplo y las transacciones. Las rutas (route.js) usan esto.
-// =====================================================================
 import pg from "pg";
 import crypto from "node:crypto";
-
-// Conexión a PostgreSQL (la dirección viene de DATABASE_URL)
 export const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-
-// ---------------------------------------------------------------------
-//  Contraseñas: se guardan cifradas con scrypt (viene con Node)
-// ---------------------------------------------------------------------
 export function cifrarClave(clave) {
   const sal = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(clave, sal, 64).toString("hex");
   return sal + ":" + hash;
 }
-
 export function claveCorrecta(clave, guardada) {
   const [sal, hash] = guardada.split(":");
   const nuevo = crypto.scryptSync(clave, sal, 64);
   return crypto.timingSafeEqual(nuevo, Buffer.from(hash, "hex"));
 }
-
-// ---------------------------------------------------------------------
-//  Tablas y datos de ejemplo (solo la primera vez)
-// ---------------------------------------------------------------------
 let listo = null;
-
 export function prepararBase() {
   if (!listo) {
     listo = crearTablas()
       .then(sembrar)
       .catch(function (e) {
-        listo = null; // si la base falló (por ejemplo, aún no estaba lista), el próximo pedido lo vuelve a intentar
+        listo = null;
         throw e;
       });
   }
   return listo;
 }
-
 async function crearTablas() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS medicos (
@@ -94,28 +76,21 @@ async function crearTablas() {
     ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
   `);
 }
-
 async function sembrar() {
   const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
   if (!email || !process.env.ADMIN_PASSWORD) {
     console.log("Faltan ADMIN_EMAIL o ADMIN_PASSWORD: no se crea el administrador");
     return;
   }
-
-  // Si ya hay usuarios, la base ya se sembró antes
   const hay = await db.query("SELECT COUNT(*) AS total FROM usuarios");
   if (Number(hay.rows[0].total) > 0) return;
-
   await db.query("INSERT INTO usuarios (nombre, email, clave, rol) VALUES ($1, $2, $3, 'administrador')", [
     "Administrador",
     email,
     cifrarClave(process.env.ADMIN_PASSWORD),
   ]);
-
   const demo = process.env.DEMO_PASSWORD;
   if (!demo) return;
-
-  // Médicos de ejemplo (inventados)
   const medicos = [
     ["Dra. Valentina Ríos", "Medicina general", "valentina.rios@ejemplo.test"],
     ["Dr. Andrés Castaño", "Medicina general", "andres.castano@ejemplo.test"],
@@ -128,8 +103,6 @@ async function sembrar() {
     idsMedicos.push(m.rows[0].id);
     await db.query("INSERT INTO usuarios (nombre, email, clave, rol, medico_id) VALUES ($1, $2, $3, 'medico', $4)", [nombre, correo, cifrarClave(demo), m.rows[0].id]);
   }
-
-  // Pacientes de ejemplo (inventados)
   const pacientes = [
     ["Laura Martínez", "1000000001", "laura.martinez@ejemplo.test", "3001112233"],
     ["Carlos Gómez", "1000000002", "carlos.gomez@ejemplo.test", "3002223344"],
@@ -143,8 +116,6 @@ async function sembrar() {
     idsPacientes.push(p.rows[0].id);
     await db.query("INSERT INTO usuarios (nombre, email, clave, rol, paciente_id) VALUES ($1, $2, $3, 'paciente', $4)", [nombre, correo, cifrarClave(demo), p.rows[0].id]);
   }
-
-  // Algunas citas en los próximos días hábiles, a las 9:00 y a las 15:00 (hora de Colombia)
   const motivos = ["Control general", "Dolor de cabeza", "Revisión de exámenes", "Chequeo anual", "Tos y fiebre"];
   const dias = proximosDiasHabiles(3);
   let n = 0;
@@ -159,25 +130,19 @@ async function sembrar() {
   }
   console.log("Datos de ejemplo creados");
 }
-
-// Fecha de hoy en Colombia, como "2026-11-18"
 function hoyEnColombia() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
 }
-
-// Los próximos días de lunes a viernes, sin contar hoy
 function proximosDiasHabiles(cuantos) {
   const dias = [];
   const fecha = new Date(hoyEnColombia() + "T12:00:00Z");
   while (dias.length < cuantos) {
     fecha.setUTCDate(fecha.getUTCDate() + 1);
-    const dia = fecha.getUTCDay(); // 0 = domingo, 6 = sábado
+    const dia = fecha.getUTCDay();
     if (dia !== 0 && dia !== 6) dias.push(fecha.toISOString().slice(0, 10));
   }
   return dias;
 }
-
-// Transacción: hace varios cambios en la base y, si uno falla, deshace todos
 export async function transaccion(trabajo) {
   const cliente = await db.connect();
   try {

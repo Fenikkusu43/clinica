@@ -1,8 +1,3 @@
-// =====================================================================
-//  Reporte (solo el administrador)
-// =====================================================================
-
-// map: cada médico del reporte se vuelve una fila
 function pintarReporte(lista) {
   const filas = lista.map(function (f) {
     return `<tr>
