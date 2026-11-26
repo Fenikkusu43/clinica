@@ -67,6 +67,9 @@ main {
 .barra .navbar-menu {
   background: var(--verde);
 }
+.barra .navbar-burger {
+  color: white;
+}
 .marca {
   font-weight: bold;
   font-size: 1.2rem;
@@ -101,8 +104,13 @@ main {
 }
 .resumen {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-around;
+  gap: 0.75rem;
   text-align: center;
+}
+.resumen > div {
+  flex: 0 1 5.5rem;
 }
 .resumen .numero {
   font-size: 2rem;

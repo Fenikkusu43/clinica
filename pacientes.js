@@ -37,9 +37,10 @@ formPaciente.addEventListener("reset", function () {
   modoCrear(formPaciente, "Nuevo paciente");
 });
 document.getElementById("tabla-pacientes").addEventListener("click", function (evento) {
-  const { editar, borrar: idBorrar } = evento.target.dataset;
-  const paciente = pacientes.find(function (p) { return p.id === Number(editar || idBorrar); });
+  const { editar, borrar: idBorrar, clave } = evento.target.dataset;
+  const paciente = pacientes.find(function (p) { return p.id === Number(editar || idBorrar || clave); });
   if (!paciente) return;
+  if (clave) abrirClave("pacientes", paciente.id, paciente.nombre);
   if (editar) llenarFormulario(formPaciente, paciente, "Editar paciente");
   if (idBorrar) borrar("pacientes", paciente.id, paciente.nombre, recargarPacientes);
 });

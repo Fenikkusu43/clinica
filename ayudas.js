@@ -92,6 +92,55 @@ function borrar(recurso, id, nombre, alTerminar) {
 function botonesFila(id) {
   return `<td class="has-text-right">
     <button class="button is-small" data-editar="${id}">Editar</button>
+    <button class="button is-small" data-clave="${id}">Contraseña</button>
     <button class="button is-small is-danger is-light" data-borrar="${id}">Borrar</button>
   </td>`;
 }
+document.addEventListener("click", function (evento) {
+  const boton = evento.target.closest("[data-ver]");
+  if (!boton) return;
+  const campo = document.getElementById(boton.dataset.ver);
+  const oculta = campo.type === "password";
+  campo.type = oculta ? "text" : "password";
+  boton.setAttribute("aria-label", oculta ? "Ocultar contraseña" : "Mostrar contraseña");
+});
+document.addEventListener("reset", function (evento) {
+  evento.target.querySelectorAll("[data-ver]").forEach(function (boton) {
+    document.getElementById(boton.dataset.ver).type = "password";
+  });
+}, true);
+document.addEventListener("keydown", function (evento) {
+  if (evento.key !== "Escape") return;
+  if (document.getElementById("modal-confirmar").classList.contains("is-active")) {
+    document.getElementById("boton-no").click();
+    return;
+  }
+  document.querySelectorAll(".modal.is-active").forEach(function (modal) { modal.classList.remove("is-active"); });
+});
+const modalClave = document.getElementById("modal-clave");
+const formClaveTemporal = document.getElementById("form-clave-temporal");
+let rutaClave = null;
+function abrirClave(recurso, id, nombre) {
+  rutaClave = recurso + "/" + id + "/clave";
+  formClaveTemporal.reset();
+  document.getElementById("texto-clave").textContent = "Para " + nombre;
+  modalClave.classList.add("is-active");
+  document.getElementById("clave-temporal").focus();
+}
+function cerrarClave() {
+  modalClave.classList.remove("is-active");
+}
+document.getElementById("clave-cerrar").addEventListener("click", cerrarClave);
+modalClave.querySelector(".modal-background").addEventListener("click", cerrarClave);
+formClaveTemporal.addEventListener("submit", function (evento) {
+  evento.preventDefault();
+  enviando(formClaveTemporal, api(rutaClave, "PATCH", datosDe(formClaveTemporal)))
+    .then(function (respuesta) {
+      cerrarClave();
+      avisar(respuesta.mensaje, "is-success");
+    })
+    .catch(function (e) {
+      cerrarClave();
+      avisar(e.message, "is-danger");
+    });
+});

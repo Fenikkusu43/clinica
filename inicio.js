@@ -5,7 +5,7 @@ function temaActual() {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 function pintarBotonTema() {
-  botonTema.textContent = temaActual() === "dark" ? " Modo claro" : "� Modo oscuro";
+  botonTema.textContent = temaActual() === "dark" ? " Modo claro" : " Modo oscuro";
 }
 botonTema.addEventListener("click", function () {
   const nuevo = temaActual() === "dark" ? "light" : "dark";

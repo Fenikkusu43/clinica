@@ -19,10 +19,21 @@ function armarMenu() {
     });
   menu.innerHTML = enlaces.join("");
 }
+const botonMenu = document.getElementById("boton-menu");
+function abrirMenu(abierto) {
+  botonMenu.classList.toggle("is-active", abierto);
+  document.getElementById("navbar-menu").classList.toggle("is-active", abierto);
+  botonMenu.setAttribute("aria-expanded", abierto);
+}
+botonMenu.addEventListener("click", function (evento) {
+  evento.preventDefault();
+  abrirMenu(!botonMenu.classList.contains("is-active"));
+});
 document.getElementById("menu").addEventListener("click", function (evento) {
   const vista = evento.target.dataset.vista;
   if (!vista) return;
   evento.preventDefault();
+  abrirMenu(false);
   abrir(vista);
 });
 function abrir(vista) {
@@ -68,6 +79,7 @@ function cerrarSesion() {
   buscador.value = "";
   document.getElementById("nombre-usuario").classList.add("is-hidden");
   document.getElementById("boton-salir").classList.add("is-hidden");
+  abrirMenu(false);
   armarMenu();
   mostrar("portada");
 }
@@ -111,3 +123,18 @@ function pintarResumen(citas) {
     <div><p class="numero has-text-info">${conteo.atendida}</p><p>atendidas</p></div>
     <div><p class="numero has-text-grey">${conteo.cancelada}</p><p>canceladas</p></div>`;
 }
+const formClave = document.getElementById("form-clave");
+formClave.addEventListener("submit", function (evento) {
+  evento.preventDefault();
+  const datos = datosDe(formClave);
+  if (datos.nueva !== document.getElementById("clave-repetir").value) {
+    avisar("Las contraseñas nuevas no coinciden.", "is-danger");
+    return;
+  }
+  enviando(formClave, api("yo/clave", "PATCH", datos))
+    .then(function (respuesta) {
+      formClave.reset();
+      avisar(respuesta.mensaje, "is-success");
+    })
+    .catch(function (e) { avisar(e.message, "is-danger"); });
+});

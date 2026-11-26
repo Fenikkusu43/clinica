@@ -32,6 +32,18 @@ function faltan(datos, campos) {
 function correoValido(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
+function documentoValido(documento) {
+  return /^\d{5,15}$/.test(String(documento).trim());
+}
+function telefonoValido(telefono) {
+  return !telefono || /^[0-9 +()-]{7,20}$/.test(telefono.trim());
+}
+function datosDePacienteMalos(datos) {
+  if (!correoValido(datos.email)) return "El correo no es válido.";
+  if (!documentoValido(datos.documento)) return "El documento debe tener solo números (de 5 a 15).";
+  if (!telefonoValido(datos.telefono)) return "El teléfono solo puede tener números, espacios, +, - y paréntesis.";
+  return null;
+}
 async function nombreDeEspecialidad(cliente, especialidad, idMedico) {
   const r = await cliente.query("SELECT especialidad FROM medicos WHERE lower(especialidad) = lower($1) AND id <> $2 LIMIT 1", [
     especialidad,
@@ -100,7 +112,8 @@ async function registro(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "documento", "email", "clave"]);
   if (falta) return error(falta, 400);
-  if (!correoValido(datos.email)) return error("El correo no es válido.", 400);
+  const malo = datosDePacienteMalos(datos);
+  if (malo) return error(malo, 400);
   if (String(datos.clave).length < 6) return error("La contraseña debe tener al menos 6 caracteres.", 400);
   try {
     const nuevo = await guardarPacienteConCuenta(datos);
@@ -117,7 +130,7 @@ function guardarPacienteConCuenta(datos) {
       datos.nombre.trim(),
       String(datos.documento).trim(),
       email,
-      datos.telefono || null,
+      datos.telefono ? datos.telefono.trim() : null,
     ]);
     const u = await cliente.query(
       "INSERT INTO usuarios (nombre, email, clave, rol, paciente_id) VALUES ($1, $2, $3, 'paciente', $4) RETURNING *",
@@ -125,6 +138,37 @@ function guardarPacienteConCuenta(datos) {
     );
     return { paciente: p.rows[0], usuario: u.rows[0] };
   });
+}
+async function cambiarMiClave(request, usuario) {
+  const datos = await leerCuerpo(request);
+  const falta = faltan(datos, ["actual", "nueva"]);
+  if (falta) return error(falta, 400);
+  if (datos.nueva.length < 6) return error("La contraseña nueva debe tener al menos 6 caracteres.", 400);
+  const r = await db.query("SELECT clave FROM usuarios WHERE id = $1", [usuario.id]);
+  if (!claveCorrecta(datos.actual, r.rows[0].clave)) return error("La contraseña actual no es correcta.", 400);
+  const token = (request.headers.get("authorization") || "").replace("Bearer ", "");
+  await transaccion(async function (cliente) {
+    await cliente.query("UPDATE usuarios SET clave = $1 WHERE id = $2", [cifrarClave(datos.nueva), usuario.id]);
+    await cliente.query("DELETE FROM sesiones WHERE usuario_id = $1 AND token <> $2", [usuario.id, token]);
+  });
+  return responder({ mensaje: "Contraseña cambiada." });
+}
+async function restablecerClave(request, tabla, columna, id, quien) {
+  const datos = await leerCuerpo(request);
+  const falta = faltan(datos, ["clave"]);
+  if (falta) return error(falta, 400);
+  if (datos.clave.length < 6) return error("La contraseña debe tener al menos 6 caracteres.", 400);
+  const cambiada = await transaccion(async function (cliente) {
+    const r = await cliente.query(
+      `UPDATE usuarios SET clave = $1 WHERE ${columna} = $2 AND ${columna} IN (SELECT id FROM ${tabla} WHERE activo) RETURNING id`,
+      [cifrarClave(datos.clave), id]
+    );
+    if (r.rows.length === 0) return false;
+    await cliente.query("DELETE FROM sesiones WHERE usuario_id = $1", [r.rows[0].id]);
+    return true;
+  });
+  if (!cambiada) return error(quien + " no existe.", 404);
+  return responder({ mensaje: "Contraseña nueva guardada." });
 }
 async function logout(request) {
   const token = (request.headers.get("authorization") || "").replace("Bearer ", "");
@@ -137,8 +181,9 @@ function errorDeBase(e, repetido) {
   if (e.code === "22001") return error("Algún dato es demasiado largo.", 400);
   throw e;
 }
-async function listarMedicos() {
-  const r = await db.query("SELECT id, nombre, especialidad, email FROM medicos WHERE activo ORDER BY nombre");
+async function listarMedicos(esAdmin) {
+  const columnas = esAdmin ? "id, nombre, especialidad, email" : "id, nombre, especialidad";
+  const r = await db.query(`SELECT ${columnas} FROM medicos WHERE activo ORDER BY nombre`);
   return responder(r.rows);
 }
 async function crearMedico(request) {
@@ -230,7 +275,8 @@ async function crearPaciente(request) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "documento", "email", "clave"]);
   if (falta) return error(falta, 400);
-  if (!correoValido(datos.email)) return error("El correo no es válido.", 400);
+  const malo = datosDePacienteMalos(datos);
+  if (malo) return error(malo, 400);
   if (String(datos.clave).length < 6) return error("La contraseña debe tener al menos 6 caracteres.", 400);
   try {
     const nuevo = await guardarPacienteConCuenta(datos);
@@ -243,7 +289,8 @@ async function editarPaciente(request, id) {
   const datos = await leerCuerpo(request);
   const falta = faltan(datos, ["nombre", "documento", "email"]);
   if (falta) return error(falta, 400);
-  if (!correoValido(datos.email)) return error("El correo no es válido.", 400);
+  const malo = datosDePacienteMalos(datos);
+  if (malo) return error(malo, 400);
   const email = datos.email.trim().toLowerCase();
   try {
     const paciente = await transaccion(async function (cliente) {
@@ -251,7 +298,7 @@ async function editarPaciente(request, id) {
         datos.nombre.trim(),
         String(datos.documento).trim(),
         email,
-        datos.telefono || null,
+        datos.telefono ? datos.telefono.trim() : null,
         id,
       ]);
       await cliente.query("UPDATE usuarios SET nombre = $1, email = $2 WHERE paciente_id = $3", [datos.nombre.trim(), email, id]);
@@ -287,6 +334,12 @@ function aTexto(minutos) {
   const h = String(Math.floor(minutos / 60)).padStart(2, "0");
   const m = String(minutos % 60).padStart(2, "0");
   return h + ":" + m;
+}
+function fechaEnUnAnio() {
+  const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
+  const fecha = new Date(hoy + "T12:00:00Z");
+  fecha.setUTCFullYear(fecha.getUTCFullYear() + 1);
+  return fecha.toISOString().slice(0, 10);
 }
 function fechaValida(fecha) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
@@ -330,7 +383,9 @@ async function horasOcupadas(request, usuario, medicoId) {
   const parametros = new URL(request.url).searchParams;
   const fecha = parametros.get("fecha") || "";
   if (!fechaValida(fecha)) return error("La fecha debe ser AAAA-MM-DD y existir.", 400);
-  const pacienteId = usuario.rol === "paciente" ? usuario.paciente_id : aId(parametros.get("paciente_id"));
+  let pacienteId = 0;
+  if (usuario.rol === "paciente") pacienteId = usuario.paciente_id;
+  if (usuario.rol === "administrador") pacienteId = aId(parametros.get("paciente_id"));
   const ocupadas = await horasConCita("medico_id", medicoId, fecha);
   const delPaciente = pacienteId ? await horasConCita("paciente_id", pacienteId, fecha) : [];
   return responder({ fecha, ocupadas, ocupadas_paciente: delPaciente });
@@ -349,6 +404,7 @@ async function agendar(request, usuario) {
   if (!horasDelHorario().includes(datos.hora)) return error("Esa hora está fuera del horario.", 400);
   const inicio = `${datos.fecha}T${datos.hora}:00-05:00`;
   if (new Date(inicio) <= new Date()) return error("No se puede agendar en el pasado.", 400);
+  if (datos.fecha > fechaEnUnAnio()) return error("Solo se puede agendar hasta un año adelante.", 400);
   const medico = await db.query("SELECT id FROM medicos WHERE id = $1 AND activo", [medicoId]);
   if (medico.rows.length === 0) return error("El médico no existe.", 404);
   const paciente = await db.query("SELECT id FROM pacientes WHERE id = $1 AND activo", [pacienteId]);
@@ -404,7 +460,7 @@ async function marcarAtendida(request, usuario, id) {
 }
 async function reporteCitasPorMedico() {
   const r = await db.query(`
-    SELECT m.nombre, m.especialidad,
+    SELECT m.nombre, m.especialidad, m.activo,
            COUNT(c.id)::int AS total,
            SUM(CASE WHEN c.estado = 'programada' AND c.inicio + interval '30 minutes' >= now() THEN 1 ELSE 0 END)::int AS programadas,
            SUM(CASE WHEN c.estado = 'programada' AND c.inicio + interval '30 minutes' < now() THEN 1 ELSE 0 END)::int AS sin_atender,
@@ -412,7 +468,7 @@ async function reporteCitasPorMedico() {
            SUM(CASE WHEN c.estado = 'cancelada' THEN 1 ELSE 0 END)::int AS canceladas
       FROM medicos m
       LEFT JOIN citas c ON c.medico_id = m.id
-     GROUP BY m.id, m.nombre, m.especialidad
+     GROUP BY m.id, m.nombre, m.especialidad, m.activo
      ORDER BY total DESC, m.nombre`);
   return responder(r.rows);
 }
@@ -439,15 +495,19 @@ async function elegirRuta(request, ruta) {
   if (!usuario) return error("Debes iniciar sesión.", 401);
   if (metodo === "POST" && camino === "logout") return logout(request);
   if (metodo === "GET" && camino === "yo") return responder(datosUsuario(usuario));
+  if (metodo === "PATCH" && camino === "yo/clave") return cambiarMiClave(request, usuario);
   const recurso = ruta[0];
   const id = aId(ruta[1]);
   const esAdmin = usuario.rol === "administrador";
   if (recurso === "medicos" && ruta.length === 1) {
-    if (metodo === "GET") return listarMedicos();
+    if (metodo === "GET") return listarMedicos(esAdmin);
     if (metodo === "POST") return esAdmin ? crearMedico(request) : error("No tienes permiso.", 403);
   }
   if (recurso === "medicos" && ruta.length === 3 && id > 0 && ruta[2] === "horas" && metodo === "GET") {
     return horasOcupadas(request, usuario, id);
+  }
+  if (recurso === "medicos" && ruta.length === 3 && id > 0 && ruta[2] === "clave" && metodo === "PATCH") {
+    return esAdmin ? restablecerClave(request, "medicos", "medico_id", id, "El médico") : error("No tienes permiso.", 403);
   }
   if (recurso === "medicos" && ruta.length === 2 && id > 0) {
     if (!esAdmin) return error("No tienes permiso.", 403);
@@ -460,6 +520,9 @@ async function elegirRuta(request, ruta) {
     if (ruta.length === 1 && metodo === "POST") return crearPaciente(request);
     if (ruta.length === 2 && id > 0 && metodo === "PUT") return editarPaciente(request, id);
     if (ruta.length === 2 && id > 0 && metodo === "DELETE") return borrarPaciente(id);
+    if (ruta.length === 3 && id > 0 && ruta[2] === "clave" && metodo === "PATCH") {
+      return restablecerClave(request, "pacientes", "paciente_id", id, "El paciente");
+    }
   }
   if (recurso === "citas" && ruta.length === 1) {
     if (metodo === "GET") return listarCitas(usuario);

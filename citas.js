@@ -21,6 +21,11 @@ function ahoraEnColombia() {
     hora: new Date().toLocaleTimeString("en-GB", { ...opciones, hour: "2-digit", minute: "2-digit" }),
   };
 }
+function fechaEnUnAnio() {
+  const fecha = new Date(ahoraEnColombia().fecha + "T12:00:00Z");
+  fecha.setUTCFullYear(fecha.getUTCFullYear() + 1);
+  return fecha.toISOString().slice(0, 10);
+}
 function horasDelDia() {
   const horas = [];
   for (const [desde, hasta] of TRAMOS) {
@@ -43,6 +48,7 @@ function prepararAgendar() {
   formAgendar.reset();
   campoHora.value = "";
   campoFecha.min = ahoraEnColombia().fecha;
+  campoFecha.max = fechaEnUnAnio();
   document.getElementById("botones-horas").innerHTML = "";
   document.getElementById("sugerencia-hora").textContent = "Elige médico y fecha para ver las horas libres.";
   campoMedico.innerHTML = `<option value="">Primero elige la especialidad</option>`;
@@ -69,7 +75,10 @@ function prepararAgendar() {
     });
   }
 }
+let pedidoDeHoras = 0;
 function buscarHoras() {
+  pedidoDeHoras++;
+  const estePedido = pedidoDeHoras;
   campoHora.value = "";
   const contenedor = document.getElementById("botones-horas");
   const sugerencia = document.getElementById("sugerencia-hora");
@@ -84,6 +93,7 @@ function buscarHoras() {
   let ruta = "medicos/" + campoMedico.value + "/horas?fecha=" + campoFecha.value;
   if (usuario.rol === "administrador" && campoPaciente.value) ruta += "&paciente_id=" + campoPaciente.value;
   cargar(ruta, function (datos) {
+    if (estePedido !== pedidoDeHoras) return;
     const ahora = ahoraEnColombia();
     const libres = horasDelDia().filter(function (hora) {
       const yaPaso = campoFecha.value === ahora.fecha && hora <= ahora.hora;
@@ -225,13 +235,6 @@ function cerrarAtender() {
 }
 document.getElementById("atender-cerrar").addEventListener("click", cerrarAtender);
 modalAtender.querySelector(".modal-background").addEventListener("click", cerrarAtender);
-document.addEventListener("keydown", function (evento) {
-  if (evento.key !== "Escape") return;
-  if (document.getElementById("modal-confirmar").classList.contains("is-active")) {
-    document.getElementById("boton-no").click();
-  }
-  cerrarAtender();
-});
 formAtender.addEventListener("submit", function (evento) {
   evento.preventDefault();
   modalAtender.classList.remove("is-active");

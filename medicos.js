@@ -24,9 +24,10 @@ formMedico.addEventListener("reset", function () {
   modoCrear(formMedico, "Nuevo médico");
 });
 document.getElementById("tabla-medicos").addEventListener("click", function (evento) {
-  const { editar, borrar: idBorrar } = evento.target.dataset;
-  const medico = medicos.find(function (m) { return m.id === Number(editar || idBorrar); });
+  const { editar, borrar: idBorrar, clave } = evento.target.dataset;
+  const medico = medicos.find(function (m) { return m.id === Number(editar || idBorrar || clave); });
   if (!medico) return;
+  if (clave) abrirClave("medicos", medico.id, medico.nombre);
   if (editar) llenarFormulario(formMedico, medico, "Editar médico");
   if (idBorrar) borrar("medicos", medico.id, medico.nombre, recargarMedicos);
 });
